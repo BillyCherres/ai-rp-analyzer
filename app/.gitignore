@@ -1,0 +1,76 @@
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# compiled python extensions
+*.so
+
+# ========================
+# Virtual environments
+# ========================
+venv/
+.env/
+.envrc
+.env.*
+
+# Conda environments
+.env
+.conda
+conda-meta/
+
+# ========================
+# Environment variables
+# ========================
+.env
+
+# ========================
+# Testing / coverage
+# ========================
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ========================
+# FastAPI / uvicorn
+# ========================
+*.log
+
+# ========================
+# IDE / Editor
+# ========================
+.vscode/
+.idea/
+
+# ========================
+# OS files
+# ========================
+.DS_Store
+Thumbs.db
+
+# ========================
+# Build artifacts
+# ========================
+build/
+dist/
+*.egg-info/
+
+# ========================
+# Python packaging
+# ========================
+.eggs/
+*.egg
+
+# ========================
+# PDF uploads (optional)
+# ========================
+uploads/
+
+# ========================
+# LangChain / Vector DB (future)
+# ========================
+chroma_db/
+vector_db/
