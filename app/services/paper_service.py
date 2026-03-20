@@ -1,34 +1,35 @@
-from app.schemas.paper import PaperCreate, PaperResponse
+from app.schemas.paper import PaperCreate
 from app.services.text_chuncker import chunk_text 
+from sqlalchemy.orm import Session
+from app.models.paper import Paper  
+from app.database import SessionLocal 
 
-papers_db: list[PaperResponse] = []
-next_id = 1
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-def createPaper(paper_data: PaperCreate) -> PaperResponse:
-    global next_id
+def createPaper(paper_data: PaperCreate, db: Session) -> Paper:
     
     chunkList = chunk_text(paper_data.content)
-    new_paper = PaperResponse(
-        id=next_id,
+    new_paper = Paper(
         title=paper_data.title,
         authors=paper_data.authors,
         abstract=paper_data.abstract,
         content=paper_data.content,
         chunks=chunkList
     )
-    
-
-    papers_db.append(new_paper)
-    next_id += 1
+    db.add(new_paper) 
+    db.commit() 
+    db.refresh(new_paper)
     
     return new_paper
+    
 
-def get_all_papers() -> list[PaperResponse]:
-    return papers_db
+def get_all_papers(db: Session) -> list[Paper]:
+    return db.query(Paper).all()
 
-def get_paper_by_id(paper_id: int) -> PaperResponse | None:
-    for paper in papers_db:
-        if paper.id == paper_id:
-            return paper
-        
-    return None
+def get_paper_by_id(paper_id: int, db: Session) -> Paper | None:
+    return db.query(Paper).filter(Paper.id ==  paper_id).first()
