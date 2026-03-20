@@ -9,6 +9,9 @@ from typing import List
 
 from app.services.pdf_service import extract_text_from_pdf
 
+from app.vector_store import get_collection                                                          
+from app.services.embedding_service import embed_query
+
 
 router = APIRouter()
 
@@ -20,10 +23,27 @@ def create_paper_enpoint(paper: PaperCreate, db: Session = Depends(get_db)):
 def get_papers_endpoint(db: Session = Depends(get_db)):
     return get_all_papers(db)
 
+@router.get("/papers/search")
+def search_papers(q: str):
+    query_vector = embed_query(q)
+    collection = get_collection()
+
+    results = collection.query(
+        query_embeddings=[query_vector],
+        n_results=5
+    )
+    return {
+        "query": q,
+        "results": [
+            {"chunk": doc, "paper_id": meta["paper_id"]}
+            for doc, meta in zip(results["documents"][0], results["metadatas"][0])
+        ]
+    }
+
 @router.get("/papers/{id}", response_model=PaperResponse)
 def get_paper_by_id_endpoint(id: int, db: Session = Depends(get_db)):
     paper = get_paper_by_id(id, db)
-    
+
     if paper is None:
         raise HTTPException(status_code=404, detail="Paper not found")
 
@@ -33,9 +53,9 @@ def get_paper_by_id_endpoint(id: int, db: Session = Depends(get_db)):
 def post_paper(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="File must be a PDF")
-    
+
     extracted_text = extract_text_from_pdf(file.file)
-    
+
     if not extracted_text:
         raise HTTPException(status_code=400, detail="Could not extract text from PDF")
 
@@ -45,8 +65,8 @@ def post_paper(file: UploadFile = File(...), db: Session = Depends(get_db)):
         abstract= "",
         content= extracted_text
     )
-    
-    created_paper = createPaper(paper_data, db)
-    
-    return created_paper
 
+    created_paper = createPaper(paper_data, db)
+
+    return created_paper
+        

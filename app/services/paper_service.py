@@ -4,6 +4,9 @@ from sqlalchemy.orm import Session
 from app.models.paper import Paper  
 from app.database import SessionLocal 
 
+from app.vector_store import get_collection                                                            
+from app.services.embedding_service import embed_texts
+
 def get_db():
     db = SessionLocal()
     try:
@@ -21,9 +24,22 @@ def createPaper(paper_data: PaperCreate, db: Session) -> Paper:
         content=paper_data.content,
         chunks=chunkList
     )
+    
     db.add(new_paper) 
     db.commit() 
     db.refresh(new_paper)
+    
+    embeddings = embed_texts(chunkList)
+    collection = get_collection()
+    
+    ids = [f"paper_{new_paper.id}_chunk_{i}" for i in range(len(chunkList))]  
+    
+    collection.add(
+        ids=ids,
+        embeddings = embeddings,
+        documents=chunkList,
+        metadatas=[{"paper_id": new_paper.id} for i in range(len(chunkList))]
+    )
     
     return new_paper
     
