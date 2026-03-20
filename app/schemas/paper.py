@@ -13,3 +13,4 @@ class PaperResponse(BaseModel):
     authors: List[str]
     abstract: str
     content: str
+    chunks: List[str]
