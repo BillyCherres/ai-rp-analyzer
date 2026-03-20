@@ -12,6 +12,7 @@ from app.services.pdf_service import extract_text_from_pdf
 from app.vector_store import get_collection                                                          
 from app.services.embedding_service import embed_query
 
+from app.services.rag_service import ask_question
 
 router = APIRouter()
 
@@ -39,6 +40,16 @@ def search_papers(q: str):
             for doc, meta in zip(results["documents"][0], results["metadatas"][0])
         ]
     }
+
+@router.post("/papers/ask")
+def ask_paper_question(body: dict):
+    question = body.get("question")
+    if not question:
+          raise HTTPException(status_code=400, detail="Missing 'question' in request body")
+    
+    answer = ask_question(question)
+    return {"question": question, "answer": answer}
+
 
 @router.get("/papers/{id}", response_model=PaperResponse)
 def get_paper_by_id_endpoint(id: int, db: Session = Depends(get_db)):
@@ -69,4 +80,5 @@ def post_paper(file: UploadFile = File(...), db: Session = Depends(get_db)):
     created_paper = createPaper(paper_data, db)
 
     return created_paper
+
         
