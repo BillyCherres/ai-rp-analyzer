@@ -15,34 +15,43 @@ The result is a system where a query like *"how do animals develop cultural beha
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    FastAPI Backend                   │
-│                                                     │
-│  POST /papers/upload                                │
-│       │                                             │
-│       ▼                                             │
-│  PDF Text Extraction (pypdf)                        │
-│       │                                             │
-│       ▼                                             │
-│  Text Chunking (500-char sliding window)            │
-│       │                                             │
-│       ├──────────────────────┐                      │
-│       ▼                      ▼                      │
-│  SQLite (paper metadata   Embedding Model           │
-│  + raw chunks)            (sentence-transformers)   │
-│                              │                      │
-│                              ▼                      │
-│                           ChromaDB                  │
-│                           (vector store)            │
-│                                                     │
-│  GET /papers/search?q=...                           │
-│       │                                             │
-│       ▼                                             │
-│  Embed query → ChromaDB similarity search           │
-│       │                                             │
-│       ▼                                             │
-│  Return top-k semantically matched chunks           │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                        FastAPI Backend                        │
+│                                                              │
+│  POST /papers/upload                                         │
+│       │                                                      │
+│       ▼                                                      │
+│  PDF Text Extraction (pypdf)                                 │
+│       │                                                      │
+│       ▼                                                      │
+│  Text Chunking (500-char sliding window)                     │
+│       │                                                      │
+│       ├──────────────────────┐                               │
+│       ▼                      ▼                               │
+│  SQLite (paper metadata   Embedding Model                    │
+│  + raw chunks)            (sentence-transformers)            │
+│                              │                               │
+│                              ▼                               │
+│                           ChromaDB                           │
+│                           (vector store)                     │
+│                                                              │
+│  GET /papers/search?q=...          POST /papers/ask          │
+│       │                                   │                  │
+│       ▼                                   ▼                  │
+│  Embed query                        Embed question           │
+│       │                                   │                  │
+│       ▼                                   ▼                  │
+│  ChromaDB similarity search    ChromaDB similarity search    │
+│       │                                   │                  │
+│       ▼                                   ▼                  │
+│  Return top-k chunks           Build grounded prompt         │
+│                                           │                  │
+│                                           ▼                  │
+│                                    Gemini 2.5 Flash          │
+│                                           │                  │
+│                                           ▼                  │
+│                                    Return answer             │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -58,9 +67,10 @@ The result is a system where a query like *"how do animals develop cultural beha
 | PDF Parsing | pypdf | Text extraction from uploaded PDFs |
 | Embedding Model | sentence-transformers (`all-MiniLM-L6-v2`) | Converts text to 384-dimensional vectors |
 | Vector Store | ChromaDB | Stores and searches embeddings by cosine similarity |
+| LLM | Google Gemini 2.5 Flash | Generates answers grounded in retrieved context (RAG) |
 | Frontend (planned) | TBD | Will consume this API |
 
-The embedding model is intentionally isolated behind a single service module (`embedding_service.py`) to allow a clean swap to a hosted provider such as Google Gemini's embedding API when moving out of local development.
+The embedding model is intentionally isolated behind a single service module (`embedding_service.py`) to allow a clean swap to a hosted provider such as Google Gemini's embedding API when moving out of local development. The LLM layer is similarly isolated in `rag_service.py`.
 
 ---
 
@@ -83,6 +93,14 @@ The embedding model is intentionally isolated behind a single service module (`e
 3. ChromaDB performs a nearest-neighbour search using cosine similarity
 4. The top 5 most semantically similar chunks are returned with their source `paper_id`
 
+### Querying (RAG — Question Answering)
+
+1. Question is received at `POST /papers/ask`
+2. Question is embedded and the top 5 most relevant chunks are retrieved from ChromaDB
+3. Chunks are assembled into a context block and injected into a prompt
+4. The prompt instructs Gemini to answer only from the provided context — preventing hallucination from training data
+5. Gemini 2.5 Flash returns a grounded natural language answer
+
 ---
 
 ## Project Structure
@@ -100,7 +118,8 @@ app/
 │   ├── paper_service.py       # Paper CRUD + embedding orchestration
 │   ├── pdf_service.py         # PDF text extraction and cleaning
 │   ├── text_chuncker.py       # Text chunking logic
-│   └── embedding_service.py   # Embedding model interface
+│   ├── embedding_service.py   # Embedding model interface (sentence-transformers)
+│   └── rag_service.py         # RAG pipeline — retrieval + Gemini generation
 └── api/
     └── routes/
         └── papers.py          # API route definitions
@@ -119,6 +138,7 @@ requirements.txt
 | `GET` | `/papers` | List all papers |
 | `GET` | `/papers/search?q=` | Semantic search across all chunks |
 | `GET` | `/papers/{id}` | Get a single paper by ID |
+| `POST` | `/papers/ask` | Ask a question, answered using RAG + Gemini |
 
 ---
 
@@ -140,7 +160,9 @@ API docs available at `http://localhost:8000/docs`
 - [x] Text chunking
 - [x] Semantic embeddings (local, sentence-transformers)
 - [x] Vector storage and similarity search (ChromaDB)
-- [ ] RAG — retrieval-augmented generation (answer questions using retrieved chunks + LLM)
-- [ ] Swap local embeddings for hosted provider (Google Gemini)
+- [x] RAG pipeline — retrieval-augmented generation via Google Gemini 2.5 Flash
+- [ ] Multi-agent router — classify question type and route to the appropriate agent (semantic search vs. summarization)
+- [ ] Summarization agent — full paper summarization for general questions
+- [ ] Swap local embeddings for hosted provider (Google Gemini embedding API)
 - [ ] Multi-paper search and cross-paper reasoning
 - [ ] Structured metadata extraction (authors, abstract, citations)
