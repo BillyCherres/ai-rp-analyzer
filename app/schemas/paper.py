@@ -1,3 +1,5 @@
+# pydantic validators. PaperCreate defines what the api accepts, PaperResponse defines what it sends back.
+
 from pydantic import BaseModel
 from typing import List
 

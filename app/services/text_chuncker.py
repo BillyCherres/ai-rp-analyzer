@@ -1,3 +1,5 @@
+# Service function that chunks text of length 500
+
 def chunk_text(text: str, chunk_size: int = 500) -> list[str]:
     chuncks = []
     

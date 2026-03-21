@@ -1,3 +1,12 @@
+# This is our rag service 
+# a service that establishes a connection with the gemini llm. 
+# its meant to act as a pipeline that enhances the llms answers. 
+# takes in a question and uses sentence transformers to convert it as a vector
+# The chromadb handles the matching of the question vector, and its relavent chunked vectors
+# Then based off these results, the llm is meant to give a more meaningful answer now 
+# that it has the relavent data to go off of
+
+
 import os
 from dotenv import load_dotenv
 

@@ -1,3 +1,7 @@
+# this is the vector embeddings service. Takes in list of chunks, returns a list of vectors
+# 2 methods meant to embedd texts and querys to later be matched against eachother to give the
+# llm the best resources to go off of when answering a question
+
 from sentence_transformers import SentenceTransformer 
 
 MODEL_NAME = "all-MiniLM-L6-v2"   

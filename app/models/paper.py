@@ -1,3 +1,4 @@
+# defines the papers table in sqlite. each instance of this class is a row in the table.
 from sqlalchemy import Column, Integer, String, JSON
 from app.database import Base
 

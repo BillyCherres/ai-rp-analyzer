@@ -1,3 +1,6 @@
+# createPaper handles the input of a pdf, sends metadata to sqlite (db) and 
+# embeddings (vectors) to chromadb (collection)
+
 from app.schemas.paper import PaperCreate
 from app.services.text_chuncker import chunk_text 
 from sqlalchemy.orm import Session

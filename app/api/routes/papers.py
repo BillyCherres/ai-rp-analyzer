@@ -1,3 +1,6 @@
+# this is the router that exposes our endpoints. we utilize the service functions to help 
+# create the functionality for these endpoints. 
+
 from fastapi import APIRouter, File, HTTPException, UploadFile, Depends
 from sqlalchemy.orm import Session
 from app.services.paper_service import get_db

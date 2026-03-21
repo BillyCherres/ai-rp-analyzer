@@ -1,3 +1,5 @@
+# service functon used for extracting text from a pdf file
+
 import re
 from pypdf import PdfReader
 
