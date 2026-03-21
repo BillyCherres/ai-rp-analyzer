@@ -1,156 +1,77 @@
 # AI Research Paper Analyzer — Backend
 
-A backend API for ingesting, indexing, and semantically querying academic research papers. Built as the foundation for an AI-powered research assistant capable of understanding and answering questions about scientific literature.
-
----
-
-## What This Does
-
-At its core, this system solves a fundamental problem with academic papers: they are long, dense, and difficult to query programmatically. Standard keyword search fails because the vocabulary in a question rarely matches the exact vocabulary in a paper. This backend addresses that by converting paper content into mathematical vector representations — embeddings — that encode semantic meaning rather than surface-level words.
-
-The result is a system where a query like *"how do animals develop cultural behaviours"* will surface relevant passages about imitation, social learning, and group-specific behaviour in non-human primates, even if those exact words never appear in the query.
+A learning project to explore RAG (Retrieval-Augmented Generation), vector databases, and the building blocks of single-agent AI systems — using research papers as the data source.
 
 ---
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                        FastAPI Backend                        │
-│                                                              │
-│  POST /papers/upload                                         │
-│       │                                                      │
-│       ▼                                                      │
-│  PDF Text Extraction (pypdf)                                 │
-│       │                                                      │
-│       ▼                                                      │
-│  Text Chunking (500-char sliding window)                     │
-│       │                                                      │
-│       ├──────────────────────┐                               │
-│       ▼                      ▼                               │
-│  SQLite (paper metadata   Embedding Model                    │
-│  + raw chunks)            (sentence-transformers)            │
-│                              │                               │
-│                              ▼                               │
-│                           ChromaDB                           │
-│                           (vector store)                     │
-│                                                              │
-│  GET /papers/search?q=...          POST /papers/ask          │
-│       │                                   │                  │
-│       ▼                                   ▼                  │
-│  Embed query                        Embed question           │
-│       │                                   │                  │
-│       ▼                                   ▼                  │
-│  ChromaDB similarity search    ChromaDB similarity search    │
-│       │                                   │                  │
-│       ▼                                   ▼                  │
-│  Return top-k chunks           Build grounded prompt         │
-│                                           │                  │
-│                                           ▼                  │
-│                                    Gemini 2.5 Flash          │
-│                                           │                  │
-│                                           ▼                  │
-│                                    Return answer             │
-└──────────────────────────────────────────────────────────────┘
+Client
+  │
+  └─ sends PDF
+        │
+        ▼
+  FastAPI endpoint
+        │
+        ▼
+  chunked into text segments
+        │
+        ▼
+  vector embedded (sentence-transformers)
+        │
+        ▼
+  stored in ChromaDB
+
+  Query
+  │
+  └─ vector embedded
+        │
+        ▼
+  ChromaDB similarity search
+        │
+        ▼
+  top chunks → RAG prompt → Gemini
+        │
+        ▼
+  answer returned to client
 ```
 
 ---
 
 ## Stack
 
-| Layer | Technology | Purpose |
-|---|---|---|
-| API Framework | FastAPI | REST API, request validation, async-ready |
-| ORM | SQLAlchemy | Database models and session management |
-| Migrations | Alembic | Schema versioning |
-| Relational DB | SQLite | Stores paper metadata, raw content, chunks |
-| PDF Parsing | pypdf | Text extraction from uploaded PDFs |
-| Embedding Model | sentence-transformers (`all-MiniLM-L6-v2`) | Converts text to 384-dimensional vectors |
-| Vector Store | ChromaDB | Stores and searches embeddings by cosine similarity |
-| LLM | Google Gemini 2.5 Flash | Generates answers grounded in retrieved context (RAG) |
-| Frontend (planned) | TBD | Will consume this API |
-
-The embedding model is intentionally isolated behind a single service module (`embedding_service.py`) to allow a clean swap to a hosted provider such as Google Gemini's embedding API when moving out of local development. The LLM layer is similarly isolated in `rag_service.py`.
+| Layer | Technology |
+|---|---|
+| API | FastAPI |
+| ORM / Migrations | SQLAlchemy + Alembic |
+| Database | SQLite |
+| PDF Parsing | pypdf |
+| Embeddings | sentence-transformers (`all-MiniLM-L6-v2`) |
+| Vector Store | ChromaDB |
+| LLM | Google Gemini 2.5 Flash |
 
 ---
 
 ## Data Flow
 
-### Ingestion (Upload)
+### Upload
 
-1. PDF is uploaded via `POST /papers/upload`
-2. Text is extracted page-by-page using `pypdf`
-3. Extracted text is cleaned (collapsed whitespace, normalised line breaks)
-4. Text is split into 500-character chunks — small enough to be semantically focused, large enough to carry context
-5. The paper record (title, authors, abstract, content, chunks) is persisted to SQLite
-6. Each chunk is passed through the embedding model, producing a 384-dimensional float vector
-7. All chunk vectors are stored in ChromaDB with their `paper_id` as metadata, enabling per-paper filtering
+1. PDF uploaded → text extracted page-by-page
+2. Text split into 500-character chunks
+3. Paper metadata and chunks saved to SQLite
+4. Each chunk embedded → vectors stored in ChromaDB
 
-### Querying (Semantic Search)
+### Search
 
-1. Query string is received at `GET /papers/search?q=`
-2. Query is embedded using the same model — producing a vector in the same 384-dimensional space
-3. ChromaDB performs a nearest-neighbour search using cosine similarity
-4. The top 5 most semantically similar chunks are returned with their source `paper_id`
+1. Query embedded into the same vector space
+2. ChromaDB returns top 5 most similar chunks
 
-### Querying (RAG — Question Answering)
+### Ask (RAG)
 
-1. Question is received at `POST /papers/ask`
-2. Question is embedded and the top 5 most relevant chunks are retrieved from ChromaDB
-3. Chunks are assembled into a context block and injected into a prompt
-4. The prompt instructs Gemini to answer only from the provided context — preventing hallucination from training data
-5. Gemini 2.5 Flash returns a grounded natural language answer
-
----
-
-## Project Structure
-
-```
-app/
-├── main.py                    # FastAPI app entry point
-├── database.py                # SQLAlchemy engine and session
-├── vector_store.py            # ChromaDB client and collection
-├── models/
-│   └── paper.py               # SQLAlchemy Paper model
-├── schemas/
-│   └── paper.py               # Pydantic request/response schemas
-├── services/
-│   ├── paper_service.py       # Paper CRUD + embedding orchestration
-│   ├── pdf_service.py         # PDF text extraction and cleaning
-│   ├── text_chuncker.py       # Text chunking logic
-│   ├── embedding_service.py   # Embedding model interface (sentence-transformers)
-│   └── rag_service.py         # RAG pipeline — retrieval + Gemini generation
-└── api/
-    └── routes/
-        └── papers.py          # API route definitions
-alembic/                       # Database migration files
-requirements.txt
-```
-
----
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/papers` | Create a paper record manually |
-| `POST` | `/papers/upload` | Upload a PDF and auto-ingest |
-| `GET` | `/papers` | List all papers |
-| `GET` | `/papers/search?q=` | Semantic search across all chunks |
-| `GET` | `/papers/{id}` | Get a single paper by ID |
-| `POST` | `/papers/ask` | Ask a question, answered using RAG + Gemini |
-
----
-
-## Setup
-
-```bash
-pip install -r requirements.txt
-alembic upgrade head
-uvicorn app.main:app --reload
-```
-
-API docs available at `http://localhost:8000/docs`
+1. Question embedded → top 5 chunks retrieved
+2. Chunks injected into a grounded prompt
+3. Gemini answers using only the provided context
 
 ---
 
@@ -161,8 +82,8 @@ API docs available at `http://localhost:8000/docs`
 - [x] Semantic embeddings (local, sentence-transformers)
 - [x] Vector storage and similarity search (ChromaDB)
 - [x] RAG pipeline — retrieval-augmented generation via Google Gemini 2.5 Flash
-- [ ] Multi-agent router — classify question type and route to the appropriate agent (semantic search vs. summarization)
-- [ ] Summarization agent — full paper summarization for general questions
+- [ ] Multi-agent router — classify question type and route to the appropriate agent
+- [ ] Summarization agent — full paper summarization
 - [ ] Swap local embeddings for hosted provider (Google Gemini embedding API)
 - [ ] Multi-paper search and cross-paper reasoning
 - [ ] Structured metadata extraction (authors, abstract, citations)
